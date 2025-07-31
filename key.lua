@@ -1,4 +1,4 @@
-local service = 5397 -- Platoboost Service ID
+local service = 5397
 local secret = "b0e320e6-6ecc-451a-be12-9b72d6a7a89b"
 local useNonce = true
 local premiumProxy = "https://platoboost-proxy.vercel.app/api/premium-key"
@@ -13,16 +13,14 @@ local fOsTime = os.time
 local fMathRandom = math.random
 local fMathFloor = math.floor
 
--- Utilise CoreGui pour éviter les problèmes avec PlayerGui
 local successGui, CoreGui = pcall(function() return game:GetService("CoreGui") end)
 if not successGui or not CoreGui then
     warn("Impossible d'accéder à CoreGui. Script arrêté.")
     return
 end
 
--- Vérifie si Players et LocalPlayer sont disponibles
 local Players = game:FindFirstChildOfClass("Players")
-local localPlayer = Players and Players:FindFirstChildWhichIsA("Player") or nil
+local localPlayer = Players and Players.LocalPlayer
 
 local function onMessage(message)
     pcall(function()
@@ -43,17 +41,20 @@ local function lDigest(input)
 end
 
 local function fGetHwid()
-    return localPlayer and "User_" .. tostring(localPlayer.UserId) or "User_Unknown"
+    if localPlayer then
+        return "User_" .. tostring(localPlayer.UserId)
+    else
+        onMessage("LocalPlayer introuvable. Impossible de vérifier la clé dans cet environnement.")
+        return "User_Unknown"
+    end
 end
 
--- Connexion API Platoboost
 local host = "https://api.platoboost.com"
 local try = fRequest({ Url = host .. "/public/connectivity", Method = "GET" })
 if try.StatusCode ~= 200 and try.StatusCode ~= 429 then
     host = "https://api.platoboost.net"
 end
 
--- Cache de lien
 local cachedLink, cachedTime = "", 0
 local function cacheLink()
     if cachedTime + (10 * 60) < fOsTime() then
@@ -147,10 +148,16 @@ end
 
 local requestSending = false
 local function verifyKey(key)
+    if not localPlayer then
+        onMessage("Impossible de vérifier la clé sans LocalPlayer.")
+        return false
+    end
+
     if requestSending then
         onMessage("Wait...")
         return false
     end
+
     requestSending = true
     local nonce = generateNonce()
     local endpoint = host .. "/public/whitelist/" .. service .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. key
@@ -172,7 +179,6 @@ local function verifyKey(key)
     return false
 end
 
--- GUI
 task.spawn(function()
     local gui = Instance.new("ScreenGui")
     gui.Name = "KeyGui"
@@ -199,7 +205,7 @@ task.spawn(function()
         if verifyKey(k) then
             loadstring(game:HttpGet("https://raw.githubusercontent.com/xxilow/Leyzo-HUB/refs/heads/main/menu.lua"))()
         else
-            onMessage("Key failed")
+            onMessage("Clé invalide ou environnement incompatible.")
         end
     end)
 
@@ -218,7 +224,7 @@ task.spawn(function()
             setclipboard("https://discord.gg/QcZv3DT8Kj")
         end)
         if success then
-            onMessage("Lien Discord copié dans le presse-papiers ! Ouvre-le dans ton navigateur.")
+            onMessage("Lien Discord copié dans le presse-papiers !")
         else
             onMessage("Impossible de copier le lien.")
         end
