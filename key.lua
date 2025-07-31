@@ -1,18 +1,33 @@
 local service = 5397 -- Set your Platoboost ID
 local secret = "b0e320e6-6ecc-451a-be12-9b72d6a7a89b" -- Set your Platoboost API key
 local useNonce = true
+
+local Players = game:FindService("Players")
+if not Players then
+    warn("Le service 'Players' n'existe pas dans cet environnement. Ce script ne peut pas continuer.")
+    return
+end
+
 local onMessage = function(message)
     game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message })
 end
 
-repeat task.wait(1) until game:IsLoaded() or game.Players.LocalPlayer
+repeat task.wait(1) until game:IsLoaded() or Players.LocalPlayer
 
 local requestSending = false
-local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor = setclipboard or toclipboard, request or http_request, string.char, tostring, string.sub, os.time, math.random, math.floor
+local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor =
+    setclipboard or toclipboard,
+    request or http_request,
+    string.char,
+    tostring,
+    string.sub,
+    os.time,
+    math.random,
+    math.floor
 
 -- ✅ HWID corrigé pour éviter l'erreur SQL
 local fGetHwid = function()
-    return "User_" .. tostring(game.Players.LocalPlayer.UserId)
+    return "User_" .. tostring(Players.LocalPlayer.UserId)
 end
 
 local cachedLink, cachedTime = "", 0
@@ -44,7 +59,7 @@ local hostResponse = fRequest({
     Url = host .. "/public/connectivity",
     Method = "GET"
 })
-if hostResponse.StatusCode ~= 200 or hostResponse.StatusCode ~= 429 then
+if hostResponse.StatusCode ~= 200 and hostResponse.StatusCode ~= 429 then
     host = "https://api.platoboost.net"
 end
 
@@ -232,7 +247,7 @@ task.spawn(function()
     local TextBox = Instance.new("TextBox")
     local TextLabel = Instance.new("TextLabel")
 
-    ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    ScreenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
     Frame.Parent = ScreenGui
