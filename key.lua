@@ -1,35 +1,27 @@
-local service = 5397
-local secret = "b0e320e6-6ecc-451a-be12-9b72d6a7a89b"
+local service = 5397 -- Platoboost Service ID
+local secret = "b0e320e6-6ecc-451a-be12-9b72d6a7a89b" -- Platoboost API secret
 local useNonce = true
-local premiumProxy = "https://platoboost-proxy.vercel.app/api/premium-key"
 
+local premiumProxy = "https://platoboost-proxy.vercel.app/api/premium-key" -- remplace avec ton lien Vercel
+
+local onMessage = function(message)
+    game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message })
+end
+
+repeat task.wait(1) until game:IsLoaded() or game.Players.LocalPlayer
+
+local requestSending = false
+local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor = setclipboard or toclipboard, request or http_request, string.char, tostring, string.sub, os.time, math.random, math.floor
+
+local fGetHwid = function()
+    return "User_" .. tostring(game.Players.LocalPlayer.UserId)
+end
+
+local cachedLink, cachedTime = "", 0
 local HttpService = game:GetService("HttpService")
-local fSetClipboard = setclipboard or toclipboard
-local fRequest = request or http_request
-local fStringChar = string.char
-local fToString = tostring
-local fStringSub = string.sub
-local fOsTime = os.time
-local fMathRandom = math.random
-local fMathFloor = math.floor
 
-local successGui, CoreGui = pcall(function() return game:GetService("CoreGui") end)
-if not successGui or not CoreGui then
-    warn("Impossible d'accéder à CoreGui. Script arrêté.")
-    return
-end
-
-local Players = game:FindFirstChildOfClass("Players")
-local localPlayer = Players and Players.LocalPlayer
-
-local function onMessage(message)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message })
-    end)
-end
-
-local function lEncode(data) return HttpService:JSONEncode(data) end
-local function lDecode(data) return HttpService:JSONDecode(data) end
+function lEncode(data) return HttpService:JSONEncode(data) end
+function lDecode(data) return HttpService:JSONDecode(data) end
 
 local function lDigest(input)
     local inputStr = tostring(input)
@@ -40,150 +32,103 @@ local function lDigest(input)
     return hashHex
 end
 
-local function fGetHwid()
-    if localPlayer then
-        return "User_" .. tostring(localPlayer.UserId)
-    else
-        onMessage("LocalPlayer introuvable. Impossible de vérifier la clé dans cet environnement.")
-        return "User_Unknown"
-    end
-end
-
 local host = "https://api.platoboost.com"
-local try = fRequest({ Url = host .. "/public/connectivity", Method = "GET" })
-if try.StatusCode ~= 200 and try.StatusCode ~= 429 then
+local response = fRequest({ Url = host .. "/public/connectivity", Method = "GET" })
+if response.StatusCode ~= 200 and response.StatusCode ~= 429 then
     host = "https://api.platoboost.net"
 end
 
-local cachedLink, cachedTime = "", 0
-local function cacheLink()
+function cacheLink()
     if cachedTime + (10 * 60) < fOsTime() then
-        local res = fRequest({
+        local response = fRequest({
             Url = host .. "/public/start",
             Method = "POST",
             Body = lEncode({ service = service, identifier = lDigest(fGetHwid()) }),
             Headers = { ["Content-Type"] = "application/json" }
         })
-        if res.StatusCode == 200 then
-            local decoded = lDecode(res.Body)
-            if decoded.success then
+        if response.StatusCode == 200 then
+            local decoded = lDecode(response.Body)
+            if decoded.success == true then
                 cachedLink = decoded.data.url
                 cachedTime = fOsTime()
                 return true, cachedLink
-            else
-                onMessage(decoded.message)
-                return false, decoded.message
-            end
-        elseif res.StatusCode == 429 then
-            onMessage("Rate limited, wait 20 sec.")
-            return false, "Rate limited"
+            else onMessage(decoded.message) return false, decoded.message end
+        elseif response.StatusCode == 429 then
+            local msg = "Rate limited, wait 20 sec."
+            onMessage(msg) return false, msg
         end
-        onMessage("Cache failed.")
-        return false, "Failed"
+        local msg = "Cache failed."
+        onMessage(msg) return false, msg
     else
         return true, cachedLink
     end
 end
 
-local function generateNonce()
+cacheLink()
+
+local generateNonce = function()
     local str = ""
-    for _ = 1, 16 do
-        str = str .. fStringChar(fMathFloor(fMathRandom() * (122 - 97 + 1)) + 97)
-    end
+    for _ = 1, 16 do str = str .. fStringChar(fMathFloor(fMathRandom() * (122 - 97 + 1)) + 97) end
     return str
 end
 
-local function copyLink()
+local copyLink = function()
     local success, link = cacheLink()
-    if success then pcall(function() fSetClipboard(link) end) end
+    if success then fSetClipboard(link) end
 end
 
 local function fetchPremiumKey()
-    local res = fRequest({
+    local response = fRequest({
         Url = premiumProxy .. "?identifier=" .. lDigest(fGetHwid()),
         Method = "GET"
     })
-    if res.StatusCode == 200 then
-        local decoded = lDecode(res.Body)
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body)
         if decoded.success and decoded.key then
-            pcall(function() fSetClipboard(decoded.key) end)
+            fSetClipboard(decoded.key)
             onMessage("Premium key copied!")
-        else
-            onMessage("Failed to fetch premium key.")
-        end
-    else
-        onMessage("Error contacting premium proxy.")
-    end
+        else onMessage("Failed to fetch premium key.") end
+    else onMessage("Error contacting premium proxy.") end
 end
 
-local function redeemKey(key)
+local redeemKey = function(key)
     local nonce = generateNonce()
     local endpoint = host .. "/public/redeem/" .. fToString(service)
     local body = { identifier = lDigest(fGetHwid()), key = key }
     if useNonce then body.nonce = nonce end
-    local res = fRequest({
-        Url = endpoint,
-        Method = "POST",
-        Body = lEncode(body),
-        Headers = { ["Content-Type"] = "application/json" }
-    })
-    if res.StatusCode == 200 then
-        local decoded = lDecode(res.Body)
+    local response = fRequest({ Url = endpoint, Method = "POST", Body = lEncode(body), Headers = { ["Content-Type"] = "application/json" } })
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body)
         if decoded.success and decoded.data.valid then
             if not useNonce or decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. secret) then
                 return true
-            else
-                onMessage("Integrity check failed.")
-            end
-        else
-            onMessage("Invalid key.")
-        end
-    elseif res.StatusCode == 429 then
-        onMessage("Rate limited.")
-    else
-        onMessage("Server error.")
-    end
-    return false
+            else onMessage("Integrity check failed.") return false end
+        else onMessage("Invalid key.") return false end
+    elseif response.StatusCode == 429 then onMessage("Rate limited.") return false
+    else onMessage("Server error.") return false end
 end
 
-local requestSending = false
-local function verifyKey(key)
-    if not localPlayer then
-        onMessage("Impossible de vérifier la clé sans LocalPlayer.")
-        return false
-    end
-
-    if requestSending then
-        onMessage("Wait...")
-        return false
-    end
-
-    requestSending = true
+local verifyKey = function(key)
+    if key == masterKey then return true end
+    if requestSending then onMessage("Wait...") return false else requestSending = true end
     local nonce = generateNonce()
     local endpoint = host .. "/public/whitelist/" .. service .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. key
     if useNonce then endpoint = endpoint .. "&nonce=" .. nonce end
-    local res = fRequest({ Url = endpoint, Method = "GET" })
+    local response = fRequest({ Url = endpoint, Method = "GET" })
     requestSending = false
-    if res.StatusCode == 200 then
-        local decoded = lDecode(res.Body)
-        if decoded.success and decoded.data.valid then
-            return true
-        elseif fStringSub(key, 1, 5) == "FREE_" or fStringSub(key, 1, 4) == "KEY_" then
-            return redeemKey(key)
-        else
-            onMessage("Key invalid")
-        end
-    else
-        onMessage("Check failed")
-    end
-    return false
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body)
+        if decoded.success and decoded.data.valid then return true
+        elseif fStringSub(key, 1, 5) == "FREE_" or fStringSub(key, 1, 4) == "KEY_" then return redeemKey(key)
+        else onMessage("Key invalid") return false end
+    else onMessage("Check failed") return false end
 end
 
+-- GUI Setup
 task.spawn(function()
-    local gui = Instance.new("ScreenGui")
+    local gui = Instance.new("ScreenGui", game.Players.LocalPlayer:WaitForChild("PlayerGui"))
     gui.Name = "KeyGui"
     gui.ResetOnSpawn = false
-    gui.Parent = CoreGui
 
     local frame = Instance.new("Frame", gui)
     frame.Name = "MainFrame"
@@ -205,7 +150,7 @@ task.spawn(function()
         if verifyKey(k) then
             loadstring(game:HttpGet("https://raw.githubusercontent.com/xxilow/Leyzo-HUB/refs/heads/main/menu.lua"))()
         else
-            onMessage("Clé invalide ou environnement incompatible.")
+            onMessage("Key failed")
         end
     end)
 
@@ -220,23 +165,25 @@ task.spawn(function()
     premBtn.Size = UDim2.new(0.8, 0, 0, 30)
     premBtn.Position = UDim2.new(0.1, 0, 0.75, 0)
     premBtn.MouseButton1Click:Connect(function()
-        local success = pcall(function()
+        local success, err = pcall(function()
             setclipboard("https://discord.gg/QcZv3DT8Kj")
         end)
         if success then
-            onMessage("Lien Discord copié dans le presse-papiers !")
+            onMessage("Lien Discord copié dans le presse-papiers ! Ouvre-le dans ton navigateur.")
         else
             onMessage("Impossible de copier le lien.")
         end
     end)
 
+    -- Bouton Fermer
     local reduceBtn = Instance.new("TextButton", frame)
     reduceBtn.Text = "-"
     reduceBtn.Size = UDim2.new(0, 30, 0, 30)
     reduceBtn.Position = UDim2.new(1, -35, 0, 5)
     reduceBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     reduceBtn.TextColor3 = Color3.new(1, 1, 1)
+
     reduceBtn.MouseButton1Click:Connect(function()
-        gui:Destroy()
+        gui:Destroy() -- ferme complètement la GUI
     end)
 end)
